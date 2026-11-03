@@ -23,7 +23,8 @@ POLICY = {"tools": {"http_post": {"domains": ["api.example.com"]}, "read_file": 
 
 
 def test_secrets_found_redacted_and_blocked(tmp_path):
-    text = "aws AKIA1234567890ABCDEF and ghp_" + "a" * 36 + " and postgres://me:hunter22@db.host/x"
+    fake_db = "postgres" + "://me:" + "not-a-real-pass" + "@db.example/x"         # built at runtime so secret scanners don't flag the repo
+    text = "aws AKIA1234567890ABCDEF and ghp_" + "a" * 36 + " and " + fake_db
     assert [s.kind for s in find_secrets(text)] == ["aws-access-key", "github-token", "database-url"]
     assert "AKIA" not in redact(text) and "[REDACTED:github-token]" in redact(text)
     assert not [s for s in find_secrets("the password field must be at least 8 characters") if s.strong]
