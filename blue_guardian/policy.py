@@ -1,7 +1,7 @@
 """The rules half of Blue Guardian: plain code that decides allow / block / ask for every action an AI agent wants to take.
 No model is involved here, so nothing an attacker writes can talk it out of a rule.
 
-A policy is a dict (or JSON file):
+A policy is a dict, a JSON file or a YAML file (YAML needs `pip install pyyaml`):
 {
   "default": "block",                                   # unknown tools are blocked
   "tools": {
@@ -12,7 +12,11 @@ A policy is a dict (or JSON file):
     "send_email": {"allow": false}
   },
   "egress_tools": ["http_get", "send_email", "http_post"],   # tools that can move data out
-  "limits": {"actions_per_minute": 30, "usd_per_day": 5}
+  "limits": {"actions_per_minute": 30, "usd_per_day": 5},
+  "mode": "enforce",                                    # or "monitor": log what would happen, block nothing
+  "secrets": "block",                                   # a secret in a data-moving tool's arguments: block | ask | allow
+  "on_injection": "block",                              # MCP proxy: withhold (block) or flag (warn) tool output that looks like an injection
+  "tests": [{"tool": "shell", "args": {"cmd": "rm -rf /"}, "expect": "block"}]   # checked by `blue-guardian test-policy`
 }
 """
 from __future__ import annotations
@@ -34,6 +38,7 @@ class Decision:
     verdict: str                 # allow | block | ask
     reason: str
     rule: str = ""
+    request_id: str = ""         # set on "ask": the approval request a human answers
 
     @property
     def allowed(self) -> bool:
@@ -46,14 +51,38 @@ class Policy:
     default: str = BLOCK
     egress_tools: list = field(default_factory=lambda: ["http_get", "http_post", "send_email", "upload"])
     limits: dict = field(default_factory=dict)
+    mode: str = "enforce"
+    secrets: str = BLOCK
+    on_injection: str = BLOCK
+    tests: list = field(default_factory=list)
     _actions: deque = field(default_factory=deque, repr=False)
     _spend: list = field(default_factory=list, repr=False)       # (timestamp, usd)
 
     @classmethod
     def load(cls, source: str | dict) -> "Policy":
-        data = source if isinstance(source, dict) else json.loads(Path(source).read_text("utf-8"))
+        if isinstance(source, dict):
+            data = source
+        elif str(source).lower().endswith((".yaml", ".yml")):
+            try:
+                import yaml
+            except ImportError as e:
+                raise RuntimeError("YAML policies need pyyaml: pip install blue-guardian[yaml]") from e
+            data = yaml.safe_load(Path(source).read_text("utf-8")) or {}
+        else:
+            data = json.loads(Path(source).read_text("utf-8"))
+        for key, allowed in (("default", (BLOCK, ASK)), ("mode", ("enforce", "monitor")), ("secrets", (BLOCK, ASK, ALLOW)),
+                             ("on_injection", (BLOCK, "warn"))):
+            if key in data and data[key] not in allowed:
+                raise ValueError(f"policy '{key}' must be one of {allowed}, not {data[key]!r}")
         return cls(tools=data.get("tools", {}), default=data.get("default", BLOCK),
-                   egress_tools=data.get("egress_tools", cls().egress_tools), limits=data.get("limits", {}))
+                   egress_tools=data.get("egress_tools", cls().egress_tools), limits=data.get("limits", {}),
+                   mode=data.get("mode", "enforce"), secrets=data.get("secrets", BLOCK),
+                   on_injection=data.get("on_injection", BLOCK), tests=data.get("tests", []))
+
+    def fresh(self) -> "Policy":
+        """Same rules, empty rate and spending counters (for policy tests)."""
+        return Policy(tools=self.tools, default=self.default, egress_tools=self.egress_tools, limits=self.limits,
+                      mode=self.mode, secrets=self.secrets, on_injection=self.on_injection, tests=self.tests)
 
     # ---------------------------------------------------------------- the checks
     def check(self, tool: str, args: dict | None = None, cost_usd: float = 0.0, now: float | None = None) -> Decision:

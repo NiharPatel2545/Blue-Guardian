@@ -127,3 +127,34 @@ below 0.5). Catch rate at 2% false alarms / false alarms at the threshold:
   are the weak spot. Old-test deepset dropped to 35% (part German).
 - Still 7 points behind ProtectAI on the fresh set, with more false alarms (2.1% vs 0.1%). The fresh set was partly seen when
   choosing v4's data (see the v4 plan), so treat 76.5% as an upper bound until a never-used test source is scored.
+
+## v5 plan (written 4 Nov 2026, before any v5 data was built or model trained)
+
+Goal: fix the weak spot (attacks hidden in tool output: web pages, emails, files) and pick the best base model.
+
+- **Bake-off, same data and settings for all:** jhu-clsp/ettin-encoder-400m (MIT), answerdotai/ModernBERT-large (Apache-2.0),
+  and mmBERT-base (MIT, the v4 base, as the control so we can tell what the data did and what the base did). Max length 256.
+- **Training addition:** BrowseSafe-Bench train split (Perplexity, MIT): 11,039 HTML pages, half with a hidden injection. The
+  pages are long (median 47k characters) and the dataset does not mark where the injection sits, so each page is cut into
+  windows; from an attack page the window that v4 and ProtectAI together score highest is the attack example; from a normal
+  page its highest-scoring window (a hard normal case) and one random window. 10% of pages go to the tune set.
+- **Long text in the product:** `inspect` scores overlapping windows and uses the highest score, so a whole page or file is
+  checked, not only its first 256 tokens.
+- **New never-used test, different source: AgentDojo** (ETH Zurich, MIT), v1 suites (workspace, travel, banking, slack).
+  Normal = every tool-output item (email, calendar event, file, web page, message, review) with its injection slots filled
+  with the suite's own harmless default text. Attacks = the same items with one slot filled by one of AgentDojo's six
+  published attack templates (important_instructions, tool_knowledge without the tool list, ignore_previous, direct,
+  system_message, injecagent) around each suite's injection goals.
+- **In-family test:** BrowseSafe-Bench test split, 600 pages sampled (300 attack, 300 normal), page score = highest window.
+  Reported, but it is the same family as the training data, so AgentDojo is the honest number.
+- **Screening (time-boxed):** each base trains 1 epoch on the same 30k-row sample; the winner is chosen by catch rate at 2%
+  false alarms on the tune set only. The winner then trains fully (3 epochs, all data). The test sets are scored once, on
+  the final candidate, with v4 and ProtectAI scored alongside (baselines, they choose nothing).
+
+**v5 ship marks:**
+1. AgentDojo test: catch rate at 2% false alarms at least **20 points above v4's** and at least **50%**.
+2. Fresh test (v3/v4's): catch rate at 2% false alarms no more than 2 points below v4's 76.5%; false alarms at the chosen
+   threshold no higher than 2.5%.
+3. BrowseSafe test (in-family): catch rate at 2% false alarms at least 20 points above v4's.
+4. Under 20 ms per 256-token window on the RTX 5070 Ti laptop GPU.
+5. Results per source and per attack template, including every place it is worse than v4 or ProtectAI.

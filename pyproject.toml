@@ -1,7 +1,7 @@
 [project]
 name = "blue-guardian"
-version = "0.4.0"
-description = "A guard for AI agents: policy rules plus a prompt-injection detector, answering allow / block / ask."
+version = "0.5.0"
+description = "A guard for AI agents and MCP tools: policy rules, a prompt-injection detector, approvals and a tamper-evident audit log."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -13,6 +13,10 @@ classifiers = ["Programming Language :: Python :: 3", "Topic :: Security", "Inte
 
 [project.optional-dependencies]
 model = ["torch", "transformers>=4.48", "huggingface_hub"]
+yaml = ["pyyaml"]
+
+[project.scripts]
+blue-guardian = "blue_guardian.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/NiharPatel2545/Blue-Guardian"

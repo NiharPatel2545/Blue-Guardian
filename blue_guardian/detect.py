@@ -96,6 +96,20 @@ class ModelDetector:
         self._clf = pipeline("text-classification", model=model, device=device, truncation=True, max_length=512, dtype=dtype)
 
     def score(self, text: str) -> Detection:
-        out = self._clf(text)[0]
-        s = out["score"] if out["label"].lower() in ("injection", "attack", "1", "label_1") else 1 - out["score"]
-        return Detection(round(s, 3), s >= self.threshold, [f"model:{out['label']}"])
+        """Long text (a web page, a file) is cut into overlapping windows and the most suspicious window decides, so an
+        attack buried deep in a page is read too, not only the first few hundred words."""
+        parts = windows(text)
+        outs = self._clf(parts, batch_size=32)
+        scores = [o["score"] if o["label"].lower() in ("injection", "attack", "1", "label_1") else 1 - o["score"] for o in outs]
+        i = max(range(len(scores)), key=scores.__getitem__)
+        reasons = [f"model:{outs[i]['label']}"] + ([f"window {i + 1} of {len(parts)}"] if len(parts) > 1 else [])
+        return Detection(round(scores[i], 3), scores[i] >= self.threshold, reasons)
+
+
+WINDOW, STEP = 1000, 800          # characters; 200 overlap so an attack cut at a boundary is whole in the next window
+
+
+def windows(text: str) -> list[str]:
+    if len(text) <= WINDOW:
+        return [text]
+    return [text[i:i + WINDOW] for i in range(0, len(text) - (WINDOW - STEP), STEP)]

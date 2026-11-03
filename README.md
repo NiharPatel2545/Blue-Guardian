@@ -2,7 +2,7 @@
 
 <h1 align="center">Blue Guardian</h1>
 
-<p align="center">A guard for AI agents: rules decide what an agent may do, and a detector reads untrusted text before the agent does.</p>
+<p align="center">A guard for AI agents and MCP tools: rules decide what an agent may do, and a detector reads untrusted text before the agent does.</p>
 
 ---
 
@@ -27,14 +27,46 @@ agent wants a tool ──► authorize() ──► policy rules + taint + kill s
    fallback. Every version is held to marks written before it was trained: [PASS_MARKS.md](PASS_MARKS.md).
 3. **Taint:** after a suspected injection is read, any tool that can move data out needs approval, even if the policy
    would normally allow it. That stops "this web page told the agent to send your files somewhere".
-4. **Kill switch:** create a file (path you choose) and every action is blocked until it is deleted.
-5. **Audit log:** every inspection and decision as one JSON line.
+4. **Secrets:** an API key, token, private key or database password in a data-moving tool's arguments is blocked, and
+   secrets are redacted from tool output and from the audit log.
+5. **Approvals that can't be reused:** an "ask" carries a request id; the approval fits that exact tool and arguments,
+   works once, expires after 5 minutes, can't come from the agent itself, and never lifts a block.
+6. **Kill switch:** create a file (path you choose) and every action is blocked until it is deleted.
+7. **Tamper-evident audit log:** every inspection and decision as one JSON line, each carrying the hash of the line before,
+   so `blue-guardian verify-log` finds any edited, deleted or reordered line.
+8. **Policies as code:** JSON or YAML, with their own tests (`blue-guardian test-policy`, exit code 1 on failure, for CI)
+   and a monitor mode that logs what would be blocked without blocking anything.
+
+How each attack maps to a defence, and the known limits: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+## Guard an MCP server (Claude Desktop, Claude Code, Cursor)
+
+Put Blue Guardian in front of any stdio MCP server. In the client's config, replace the server's command with:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "blue-guardian",
+      "args": ["mcp-proxy", "--policy", "C:/path/to/coding-agent.yaml", "--audit-log", "C:/path/to/audit.jsonl",
+               "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "C:/path/to/project"]
+    }
+  }
+}
+```
+
+Every tool call is checked against the policy before the server sees it, and "ask" opens a dialog on your screen (the
+agent can't click it). Tool results are scanned for injection and withheld if they look like one (the session is then
+tainted). Tool descriptions are scanned for hidden instructions and pinned, so a server that changes a tool's description
+later (a rug pull) gets that tool hidden until you re-pin with `--repin`. Start from
+[examples/coding-agent.yaml](examples/coding-agent.yaml) and check it with `blue-guardian test-policy examples/coding-agent.yaml`.
 
 ## Install
 
 ```powershell
 pip install "blue-guardian[model] @ git+https://github.com/NiharPatel2545/Blue-Guardian"   # rules + the trained detector
 pip install "blue-guardian @ git+https://github.com/NiharPatel2545/Blue-Guardian"          # rules + keyword detector only, no torch
+pip install "blue-guardian[model,yaml] @ git+https://github.com/NiharPatel2545/Blue-Guardian" # plus YAML policies
 ```
 
 ## Use
@@ -84,6 +116,9 @@ Scored once per model on 7,601 texts in 8 languages from sources never used in t
 
 14.7 ms per text on a laptop GPU, about 33 ms on a laptop CPU for short texts.
 
+Long text (a whole web page or file) is scanned in overlapping windows and the most suspicious window decides. v4 never saw
+HTML in training and is too jumpy on raw web pages (it flagged 20 of 25 normal pages in a quick check); v5 trains on them.
+
 Honest limits: still behind ProtectAI's model; weak on attacks hidden in agent tool output (InjecAgent 21.5% caught), which is
 why the rule layer (taint, approvals, allowlists) matters; the test set was partly seen when choosing v4's data, so treat 76.5% as
 an upper bound. No guard catches everything: the goal is a measured catch rate at a low, published false-alarm rate, and rules
@@ -91,10 +126,12 @@ that limit the damage when something slips through.
 
 | Part | State |
 |---|---|
-| Policy, taint, kill switch, audit log, tool decorator | Working, 6 tests |
+| Policy, taint, kill switch, tool decorator | Working |
+| Secrets, bound approvals, hash-chained audit log, YAML policies with tests, monitor mode | Working (v0.5) |
+| MCP proxy: call checks, owner dialog, injected-output withholding, tool poisoning and rug-pull checks | Working (v0.5), tested against a fake server |
 | Trained detector (blue-guardian-v4) | Released; passes its pass marks; Prompt Guard 2 comparison pending |
-| Next detector | Agent-style indirect attacks, scored on a never-used test source |
-| HTTP service and agent-framework adapters | Later |
+| Next detector (v5) | Base-model bake-off plus web-page and tool-output attacks, scored on AgentDojo (never used); plan in PASS_MARKS.md |
+| HTTP service, agent-framework adapters, dashboard | Later |
 
 ## Reproduce
 
