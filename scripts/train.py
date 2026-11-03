@@ -4,6 +4,7 @@ The tune set picks the best epoch; the test set is not touched here (scripts/sco
 """
 import argparse
 import json
+import random
 from pathlib import Path
 
 import numpy as np
@@ -15,8 +16,10 @@ from transformers import (AutoModelForSequenceClassification, AutoTokenizer, Dat
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def load(name):
-    rows = [json.loads(line) for line in open(ROOT / "data" / f"{name}.jsonl", encoding="utf-8")]
+def load(*names, sample=0):
+    rows = [json.loads(line) for n in names for line in open(ROOT / "data" / f"{n}.jsonl", encoding="utf-8")]
+    if sample and sample < len(rows):
+        rows = random.Random(7).sample(rows, sample)          # the same sample for every base
     return Dataset.from_dict({"text": [r["text"] for r in rows], "label": [r["label"] for r in rows]})
 
 
@@ -35,10 +38,14 @@ def main():
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--out", default=str(ROOT / "models" / "blue-guardian-v1"))
+    ap.add_argument("--extra", help="extra data prefix: adds data/<prefix>_train.jsonl and data/<prefix>_tune.jsonl")
+    ap.add_argument("--sample", type=int, default=0, help="train on a fixed random sample of this many rows (screening)")
     a = ap.parse_args()
 
     tok = AutoTokenizer.from_pretrained(a.base)
-    train, tune = load("train"), load("tune")
+    extra = [a.extra] if a.extra else []
+    train = load("train", *[f"{e}_train" for e in extra], sample=a.sample)
+    tune = load("tune", *[f"{e}_tune" for e in extra])
     enc = lambda b: tok(b["text"], truncation=True, max_length=a.max_len)
     train, tune = train.map(enc, batched=True, remove_columns=["text"]), tune.map(enc, batched=True, remove_columns=["text"])
     model = AutoModelForSequenceClassification.from_pretrained(a.base, num_labels=2, id2label={0: "normal", 1: "injection"},
@@ -52,7 +59,7 @@ def main():
                 "false_alarms": float(pred[labels == 0].mean()), "catch_at_2pct": catch_at_fpr(probs, labels)}
 
     args = TrainingArguments(
-        output_dir=str(ROOT / "runs" / "v1"), num_train_epochs=a.epochs, learning_rate=a.lr, per_device_train_batch_size=a.batch,
+        output_dir=str(ROOT / "runs" / Path(a.out).name), num_train_epochs=a.epochs, learning_rate=a.lr, per_device_train_batch_size=a.batch,
         per_device_eval_batch_size=64, eval_strategy="epoch", save_strategy="epoch", save_total_limit=1, load_best_model_at_end=True,
         metric_for_best_model="catch_at_2pct", greater_is_better=True, weight_decay=0.01,
         warmup_steps=int(0.06 * len(train) / a.batch * a.epochs),          # warm up over the first 6% of steps

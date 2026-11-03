@@ -158,3 +158,13 @@ Goal: fix the weak spot (attacks hidden in tool output: web pages, emails, files
 3. BrowseSafe test (in-family): catch rate at 2% false alarms at least 20 points above v4's.
 4. Under 20 ms per 256-token window on the RTX 5070 Ti laptop GPU.
 5. Results per source and per attack template, including every place it is worse than v4 or ProtectAI.
+
+**v5 amendments (4 Nov 2026, before any v5 model was trained or anything was scored on the v5 tests):**
+- AgentDojo test built: 2,358 rows, 2,136 attacks (356 per template), 222 normal. Besides whole items, each long text field
+  (an email body, a web page, a file) also counts as its own tool output, since many tools return just that. With 222
+  normal items the AgentDojo false-alarm rate is coarse (1 item = 0.45 points); the fresh test (5,725 normal texts)
+  stays the main false-alarm check.
+- BrowseSafe training uses 4,000 of the 11,039 training pages (2,000 attack, 2,000 normal) to keep the window-picking
+  step under an hour on the laptop GPU.
+- Observation before v5 (BrowseSafe *train* split, 40 pages, not a score): v4 with window scanning flagged 12 of 15 attack
+  pages and 20 of 25 normal pages. v4 can't tell normal HTML from an attack; that is what v5's web data is for.
