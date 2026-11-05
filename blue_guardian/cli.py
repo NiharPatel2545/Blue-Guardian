@@ -9,10 +9,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import os
 import sys
 
 
 def make_detector(name: str):
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")       # keep library logs and progress bars off the screen
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    logging.getLogger("torch.distributed.elastic.multiprocessing.redirects").setLevel(logging.ERROR)   # harmless Windows note
     from blue_guardian.detect import DEFAULT_MODEL, HeuristicDetector, ModelDetector
     if name == "heuristic":
         return HeuristicDetector()
@@ -43,6 +48,7 @@ def main(argv=None) -> int:
     v.add_argument("log")
     s = sub.add_parser("scan")
     s.add_argument("file", nargs="?")
+    s.add_argument("--text", help="text to score, instead of a file or stdin")
     s.add_argument("--detector", default="auto")
     a = ap.parse_args(argv)
 
@@ -59,7 +65,7 @@ def main(argv=None) -> int:
         print(why)
         return 0 if ok else 1
     if a.cmd == "scan":
-        text = open(a.file, encoding="utf-8", errors="replace").read() if a.file else sys.stdin.read()
+        text = a.text if a.text is not None else open(a.file, encoding="utf-8", errors="replace").read() if a.file else sys.stdin.read()
         d = make_detector(a.detector).score(text)
         print(json.dumps({"score": d.score, "flagged": d.flagged, "reasons": d.reasons}))
         return 1 if d.flagged else 0
