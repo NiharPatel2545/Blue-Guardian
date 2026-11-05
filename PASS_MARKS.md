@@ -206,3 +206,17 @@ on the list of things v5 and later must be checked against; they are not added t
   windows agree, or a separate page threshold chosen on BrowseSafe tune pages), scored on the BrowseSafe test once;
   (2) more harmless requests that sound risky in the tune set, so the threshold is chosen on the kind of text that caused
   the false alarms.
+
+## v6 plan (written 5 Nov 2026, before any v6 code ran)
+
+v6 keeps v5's trained weights and changes only how scores become a yes or no:
+- **Threshold from a wider tune set.** The tune set's normal text gains 2,000 OR-Bench prompts and 2,000 oasst2 prompts that
+  were never used in training (the rows after the training caps in the same shuffle). The threshold is the one that keeps
+  false alarms on all tune normal text at 2% or less.
+- **A page-level rule for long text.** For text cut into several windows, a small logistic regression reads the window
+  scores (highest, second highest, mean, share above 0.5, number of windows) and gives one page score. It is fitted on
+  BrowseSafe *train* pages not used for v5's windows (300 attack, 300 normal); its threshold keeps false alarms at 2% on
+  another 200 unused train pages (100 + 100). The BrowseSafe test is not touched until scoring.
+- **Marks:** the same four as v5 (AgentDojo +20 over v4 and at least 50%; fresh test no more than 2 points below v4 at 2%
+  and false alarms at the threshold no higher than 2.5%; BrowseSafe pages +20 points over v4 at 2%; speed as v4), scored
+  once. v6 replaces v4 as the default only if all four pass.
