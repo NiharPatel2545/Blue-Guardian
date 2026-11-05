@@ -168,3 +168,9 @@ Goal: fix the weak spot (attacks hidden in tool output: web pages, emails, files
   step under an hour on the laptop GPU.
 - Observation before v5 (BrowseSafe *train* split, 40 pages, not a score): v4 with window scanning flagged 12 of 15 attack
   pages and 20 of 25 normal pages. v4 can't tell normal HTML from an attack; that is what v5's web data is for.
+
+**v5 screening result (5 Nov 2026, tune set only; 1 epoch on the same 30k-row sample).** Catch rate at 2% false alarms /
+false alarms at 0.5 / tune-set scoring time: mmBERT-base 82.9% / 0.68% / 14 s; ModernBERT-large 82.9% / 0.82% / 30 s;
+Ettin-encoder-400m 82.0% / 0.74% / 30 s. Tie between mmBERT-base and ModernBERT-large; by the rule set before the run (within
+0.01, take the smaller and faster model) **mmBERT-base** is the v5 base. The bigger bases bought nothing here; the data is
+what moves the score.
