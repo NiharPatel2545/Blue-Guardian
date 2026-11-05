@@ -240,3 +240,7 @@ v6 keeps v5's trained weights and changes only how scores become a yes or no:
 - Lessons for next time: long-text handling must be fitted on the kinds of long text it will see (tool output, files,
   pages), not HTML only; a page decision probably needs the model to read HTML structure (where the text sits: comments,
   hidden fields), not just window scores; the threshold needs tune texts like the ones that fail.
+
+**Correction (5 Nov 2026) to the v5 note above.** v5's extra false alarms over v4 on the fresh test, counted: everyday chatbot
+prompts (alespalla) +34, S-Labs normal text +11, safeguard +6, JailbreakBench harmless requests +6 (57 in all). So most
+come from ordinary chat prompts, not JailbreakBench; JailbreakBench only has the highest *rate* (11 of 27).
