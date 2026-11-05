@@ -7,6 +7,7 @@ trained model (ModelDetector, see PASS_MARKS.md) must beat on held-out data befo
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -65,16 +66,27 @@ class HeuristicDetector:
 DEFAULT_MODEL = "niharpatel2545/blue-guardian-v4"
 
 
-def _threshold(model: str) -> float:
-    """The threshold train.py chose on the tune set (guardian.json next to the weights), else 0.5."""
-    cfg = Path(model) / "guardian.json"
+def _config(model: str, name: str) -> dict | None:
+    """A JSON file next to the weights (local folder or Hugging Face), or None."""
+    cfg = Path(model) / name
     if not cfg.exists():
         try:
             from huggingface_hub import hf_hub_download
-            cfg = Path(hf_hub_download(model, "guardian.json"))
+            cfg = Path(hf_hub_download(model, name))
         except Exception:
-            return 0.5
-    return float(json.loads(cfg.read_text("utf-8"))["threshold"])
+            return None
+    return json.loads(cfg.read_text("utf-8"))
+
+
+def _threshold(model: str) -> float:
+    """The threshold train.py chose on the tune set (guardian.json next to the weights), else 0.5."""
+    return float((_config(model, "guardian.json") or {}).get("threshold", 0.5))
+
+
+def page_features(scores: list[float]) -> list[float]:
+    """What the page rule reads from a long text's window scores (see PASS_MARKS.md, v6)."""
+    s = sorted(scores, reverse=True)
+    return [s[0], s[1] if len(s) > 1 else s[0], sum(s) / len(s), sum(x > 0.5 for x in s) / len(s), math.log(len(s))]
 
 
 class ModelDetector:
@@ -89,6 +101,7 @@ class ModelDetector:
         except ImportError as e:
             raise RuntimeError("ModelDetector needs torch and transformers: pip install blue-guardian[model]") from e
         self.threshold = _threshold(model) if threshold is None else threshold
+        self.page = _config(model, "page.json")       # v6+: one decision for a long text from all its window scores
         if device is None:
             device = 0 if torch.cuda.is_available() else "cpu"
         # half precision on the GPU: about 2x faster, same answers to 2 decimals; full precision on the CPU
@@ -102,6 +115,11 @@ class ModelDetector:
         outs = self._clf(parts, batch_size=32)
         scores = [o["score"] if o["label"].lower() in ("injection", "attack", "1", "label_1") else 1 - o["score"] for o in outs]
         i = max(range(len(scores)), key=scores.__getitem__)
+        if len(parts) > 1 and self.page:
+            z = self.page["b"] + sum(w * f for w, f in zip(self.page["w"], page_features(scores)))
+            p = 1 / (1 + math.exp(-z))
+            return Detection(round(p, 3), p >= self.page["threshold"], [f"page rule over {len(parts)} windows",
+                                                                         f"most suspicious: window {i + 1} ({scores[i]:.2f})"])
         reasons = [f"model:{outs[i]['label']}"] + ([f"window {i + 1} of {len(parts)}"] if len(parts) > 1 else [])
         return Detection(round(scores[i], 3), scores[i] >= self.threshold, reasons)
 
