@@ -220,3 +220,23 @@ v6 keeps v5's trained weights and changes only how scores become a yes or no:
 - **Marks:** the same four as v5 (AgentDojo +20 over v4 and at least 50%; fresh test no more than 2 points below v4 at 2%
   and false alarms at the threshold no higher than 2.5%; BrowseSafe pages +20 points over v4 at 2%; speed as v4), scored
   once. v6 replaces v4 as the default only if all four pass.
+
+**v6 result (5 Nov 2026, scored once).** Catch rate at 2% false alarms / false alarms at the threshold:
+
+| | AgentDojo | Fresh test | BrowseSafe pages |
+|---|---|---|---|
+| v4 | 42.3% / 2.7% | 76.6% / 2.1% | 0.0% / 82.3% |
+| v5 | 67.0% / 2.7% | 78.7% / 3.1% | 0.0% / 71.3% |
+| **v6** | 50.6% / 2.7% | 69.6% / 3.2% | 9.7% / 4.3% |
+
+- Marks 1, 2 and 3 **failed**; v4 stays the default. v6 is worse than v5 on the two main tests.
+- Why: the page rule was fitted on HTML pages but applies to every text longer than one window: 518 of 2,358 AgentDojo
+  texts and 251 of 7,601 fresh-test texts. On those it scores lower than the plain top window, so attacks drop below the
+  line. On real pages it cut false alarms from 71% to 4.3%, but caught only 16% of attack pages: the window scores alone
+  don't separate a page with a hidden attack from a page with a suspicious-looking distractor.
+- The wider tune set did not move the threshold the way planned: 2% false alarms on it fell below 0.5, so the threshold
+  stayed at the 0.5 floor (v5's was 0.577). The new tune texts (OR-Bench, oasst2) are not the kind that caused v5's false
+  alarms (JailbreakBench's harmful-sounding harmless requests, 40.7%).
+- Lessons for next time: long-text handling must be fitted on the kinds of long text it will see (tool output, files,
+  pages), not HTML only; a page decision probably needs the model to read HTML structure (where the text sits: comments,
+  hidden fields), not just window scores; the threshold needs tune texts like the ones that fail.
