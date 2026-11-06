@@ -137,7 +137,7 @@ that limit the damage when something slips through.
 | Secrets, bound approvals, hash-chained audit log, YAML policies with tests, monitor mode | Working (v0.5) |
 | MCP proxy: call checks, owner dialog, injected-output withholding, tool poisoning and rug-pull checks | Working (v0.5), tested against a fake server |
 | Trained detector (blue-guardian-v4) | Released; passes its pass marks; Prompt Guard 2 comparison pending |
-| Next detector (v5) | Base-model bake-off plus web-page and tool-output attacks, scored on AgentDojo (never used); plan in PASS_MARKS.md |
+| Next detector | v5 and v6 tested (AgentDojo 42% -> 67% caught, but false alarms too high), v4 stays default; results in PASS_MARKS.md |
 | HTTP service, agent-framework adapters, dashboard | Later |
 
 ## Reproduce
